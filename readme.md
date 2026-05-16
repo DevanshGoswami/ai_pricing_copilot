@@ -70,4 +70,3 @@ Additional edge cases handled:
 ```bash
 pnpm build
 ```
-# ai_pricing_copilot
