@@ -65,6 +65,71 @@ Additional edge cases handled:
 - If we are winning and already very close to the competitor, the SKU is held because there is not enough safe upside to justify another price move.
 - If the AI returns a decision outside the safe price range, the app falls back to the deterministic guardrail recommendation.
 
+## Production HLD Recommendation
+
+For production, I would keep the same guardrailed recommendation engine but automate the ingestion, approval, and execution layers around it. The ingestion principle would be: marketplace APIs first, approved data feeds second, and marketplace-specific crawlers only when APIs do not expose the required signals.
+
+```mermaid
+flowchart LR
+  subgraph Marketplaces["Marketplaces"]
+    Amazon["Amazon"]
+    Noon["Noon"]
+    Flipkart["Flipkart"]
+    Lazada["Lazada"]
+  end
+
+  subgraph Ingestion["Ingestion Layer"]
+    Router["Ingestion Router"]
+    APIs["Official APIs / Approved Feeds"]
+    Crawlers["Marketplace-specific Crawlers"]
+  end
+
+  subgraph Data["Data Layer"]
+    Queue["Job Queue"]
+    Postgres["Postgres\nNormalized SKU + Competitor Data"]
+    Evidence["Raw Snapshots / Evidence Store"]
+  end
+
+  subgraph Intelligence["Pricing Intelligence"]
+    Matcher["SKU + Competitor Matcher"]
+    Guardrails["Deterministic Guardrails\nMargin Floor, Cooldown, Safe Bounds"]
+    LLM["LLM Reasoning Layer"]
+    Recommendations["Recommendation Engine"]
+  end
+
+  subgraph Workflow["Approval + Execution"]
+    Copilot["Pricing Copilot UI"]
+    Slack["Slack Approval Workflow"]
+    Audit["Audit Log"]
+    MarketplaceAPI["Marketplace Pricing APIs"]
+  end
+
+  Marketplaces --> Router
+  Queue --> Router
+  Router --> APIs
+  Router --> Crawlers
+
+  APIs --> Postgres
+  Crawlers --> Postgres
+  Crawlers --> Evidence
+
+  Postgres --> Matcher
+  Matcher --> Guardrails
+  Guardrails --> LLM
+  LLM --> Recommendations
+  Recommendations --> Postgres
+
+  Postgres --> Copilot
+  Recommendations --> Slack
+
+  Copilot --> Audit
+  Slack --> Audit
+  Copilot --> MarketplaceAPI
+  Slack --> MarketplaceAPI
+```
+
+Critical recommendations could be reviewed in the Copilot UI or pushed into Slack for approval. Once approved, the system would update the price through the relevant marketplace API and write the decision trail to an audit log.
+
 ## Build Check
 
 ```bash
